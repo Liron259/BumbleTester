@@ -1,56 +1,31 @@
 #include <Servo.h>
-#include <LiquidCrystal.h>
+#include <LiquidCrystal_I2C.h>
 
 Servo victor1, spark1, victor2, spark2;
-const int speed1 = A0, speed2 = A1, forward1 = A2, backward1 = A3, forward2 = A4, backward2 = A5;
-int direction1 = 0, direction2 = 0, power1 = 0, power2 = 0, lastPower1 = 0, lastPower2 = 0, lastDirection1 = 0, lastDirection2 = 0;  
-long lastOperationTime = 0;
+const int speed1 = A0, speed2 = A1, forward1 = A2, backward1 = A3, forward2 = 3, backward2 = 4, both = 2;
+int direction1 = 0, direction2 = 0, power1 = 0, power2 = 0, lastPower1 = 1, lastPower2 = 1, lastDirection1 = 1, lastDirection2 = 1, powerPercentage1 = 1, powerPercentage2 = 1, useBoth = 0;
 
-const int rs = 12, en = 11, d4 = 5, d5 = 4, d6 = 3, d7 = 2;
-LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
+ LiquidCrystal_I2C lcd(0x27, 16, 2);
 
-void setup() {
-  Serial.begin(9600);
-  pinMode(speed1, INPUT);
-  pinMode(speed2, INPUT);
-  pinMode(forward1, INPUT_PULLUP);
-  pinMode(backward1, INPUT_PULLUP);
-  pinMode(forward2, INPUT_PULLUP);
-  pinMode(backward2, INPUT_PULLUP);
-
-  victor1.attach(6);
-  spark1.attach(7);
-  victor2.attach(8);
-  spark2.attach(9);
-  
-  lcd.begin(16, 2);
-  lcd.print("Starting");
-  lcd.setCursor(0, 1);
-  lcd.print("BumbleTester");
-  Serial.println("Starting BumbleTester");
-  delay(2000);
+void setUpScreen(){
   lcd.clear();
-}
-
-void loop() {
-  readSpeeds();
-  readToggles();
-  if(power1 != lastPower1 || power2 != lastPower2 || direction1 != lastDirection1 || direction2 != lastDirection2){
-    if(millis() >= 3000 + lastOperationTime){
-      writePowerToControllers();
-      showOutputPower();
-    }
-  }
-  lastPower1 = power1;
-  lastPower2 = power2;
-  lastDirection1 = direction1;
-  lastDirection2 = direction2;
-  delay(20);
+  lcd.print("Power 1: ");
+  lcd.setCursor(15, 0);
+  lcd.print("%");
+  lcd.setCursor(0, 1);
+  lcd.print("Power 2: ");
+  lcd.setCursor(15, 1);
+  lcd.print("%");
 }
 
 void readSpeeds(){
   power1 = analogRead(speed1);
   power2 = analogRead(speed2);
+  if(useBoth == 1){
+    power2 = power1;
+  }
+  powerPercentage1 = map(power1, 0, 1023, 0, 100);
+  powerPercentage2 = map(power2, 0, 1023, 0, 100);
 }
 
 void readToggles(){
@@ -71,6 +46,7 @@ void readToggles(){
   }else{
     direction2 = 0;
   }
+  useBoth = !digitalRead(both);
 }
 
 void writePowerToControllers(){
@@ -97,46 +73,74 @@ void writePowerToControllers(){
   spark1.writeMicroseconds(output1);
   victor2.writeMicroseconds(output2);
   spark2.writeMicroseconds(output2);
-  lastOperationTime = millis();
 }
 
 void showOutputPower(){
-  int powerPercentage1 = map(power1, 0, 1023, 0, 100);
-  int powerPercentage2 = map(power2, 0, 1023, 0, 100);
+  //clear screen
+  for(int x = 12; x < 15; x++){
+    lcd.setCursor(x, 0);
+    lcd.print(" ");
+    lcd.setCursor(x, 1);
+    lcd.print(" ");
+  }
 
   // print motor 1 power
-  lcd.print("Power 1: ");
-  for(int x = 0; x > 3; x++){
-    lcd.setCursor(0, 12);
-    lcd.print("");
-  }
   if(powerPercentage1 == 100){
-    lcd.setCursor(0, 12);
+    lcd.setCursor(12, 0);
   }else{
-    lcd.setCursor(0, 13);
+    lcd.setCursor(13, 0);
   }
   lcd.print(powerPercentage1);
-  lcd.print("%");
-  Serial.print("Power 1: ");
-  Serial.print(powerPercentage1);
-  Serial.println("%");
 
   
   // print motor 2 power
-  lcd.setCursor(0,1);
-  lcd.print("Power 1: ");
-  for(int x = 0; x > 3; x++){
-    lcd.setCursor(0, 12);
-    lcd.print("");
-  }
   if(powerPercentage2 == 100){
-    lcd.setCursor(0, 12);
+    lcd.setCursor(12, 1);
   }else{
-    lcd.setCursor(0, 13);
+    lcd.setCursor(13, 1);
   }
   lcd.print(powerPercentage2);
-  lcd.print("%");
-  Serial.print("Power 2: ");
-  Serial.print(powerPercentage2);
-  Serial.println("%");
+}
+
+void setup() {
+  pinMode(speed1, INPUT);
+  pinMode(speed2, INPUT);
+  pinMode(forward1, INPUT_PULLUP);
+  pinMode(backward1, INPUT_PULLUP);
+  pinMode(forward2, INPUT_PULLUP);
+  pinMode(backward2, INPUT_PULLUP);
+  pinMode(2, INPUT_PULLUP);
+  pinMode(5, OUTPUT);
+  pinMode(12,OUTPUT);
+
+  digitalWrite(5, 0);
+  digitalWrite(12,0);
+
+  victor1.attach(8);
+  spark1.attach(9);
+  victor2.attach(6);
+  spark2.attach(7);
+  
+  lcd.init();
+  lcd.backlight();
+  lcd.setCursor(0, 0);
+  lcd.print("Starting");
+  lcd.setCursor(0, 1);
+  lcd.print("BumbleTester");
+  delay(2000);
+  setUpScreen();
+}
+
+void loop() {
+  readToggles();
+  readSpeeds();
+  if(powerPercentage1 != lastPower1 || powerPercentage2 != lastPower2 || direction1 != lastDirection1 || direction2 != lastDirection2){
+    writePowerToControllers();
+    showOutputPower();
+  }
+  lastPower1 = powerPercentage1;
+  lastPower2 = powerPercentage2;
+  lastDirection1 = direction1;
+  lastDirection2 = direction2;
+  delay(20);
 }
